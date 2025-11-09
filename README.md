@@ -6,7 +6,7 @@ Press **R** after collision to **restart**. Includes simple **sound effects**.
 
 ## Demo
 _Add a screenshot or GIF here (e.g., `docs/screenshot.png`)._
-<img width="361" height="223" alt="Capture d’écran 2025-10-27 à 17 52 29" src="https://github.com/user-attachments/assets/37dc0936-a23a-4b97-9c4c-37d2746d09f4" />
+<img width="365" height="218" alt="Capture d’écran 2025-11-09 à 19 11 30" src="https://github.com/user-attachments/assets/1db75ea0-e73e-4580-adb2-fa4aa059e854" />
 
 ## Features
 - Real-time game loop with raylib
