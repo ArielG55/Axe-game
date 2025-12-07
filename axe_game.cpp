@@ -1,228 +1,302 @@
 #include "raylib.h"
-#include <cmath>
+#include "Player.h"
+
+// ---------------- Game types ----------------
+
+enum GameState {
+    PLAYING,
+    GAME_OVER,
+    WIN
+};
+
+struct Obstacle {
+    float x, y, w, h;
+    bool  active;
+};
+
+// ---------------- main ----------------
 
 int main()
 {
     // --- Window ---
     const int WIDTH  = 800;
     const int HEIGHT = 450;
-    InitWindow(WIDTH, HEIGHT, "Ariel's crazy dodge");
-
+    InitWindow(WIDTH, HEIGHT, "Ariel's Runner");
     SetTargetFPS(60);
 
     // --- Audio ---
     InitAudioDevice();
-    Sound sPoint = LoadSound("point.wav");      // score sound
-    Sound sHit   = LoadSound("GameOver.wav");  // hit sound
 
-    // --- Player (circle) ---
-    float circleX = 150.0f;
-    float circleY = HEIGHT / 2.0f;
-    const float R = 25.0f;
-    const float PLAYER_SPEED = 300.0f; // pixels / second
+    // scary background theme – loops while PLAYING
+    Sound sTheme = LoadSound("Theme.wav");
+    // game-over hit sound
+    Sound sHit   = LoadSound("GameOver.wav");
 
-    // --- Axe (now moves in ALL directions) ---
-    const float AXE_SIZE = 50.0f;
-    float axeX = WIDTH / 2.0f;
-    float axeY = 100.0f;
-    float axeVX = 250.0f;  // x velocity (can be + or -)
-    float axeVY = 180.0f;  // y velocity
+    // start theme immediately
+    PlaySound(sTheme);
 
-    // --- Laser obstacle ---
-    bool  laserActive   = false;
-    float laserY        = 0.0f;   // vertical position of the laser line
-    float laserTimer    = 0.0f;   // how long the laser is visible
-    float laserCooldown = 2.0f;   // time until next laser appears
-    const float LASER_THICKNESS = 12.0f;
-    const float LASER_DURATION  = 0.6f;  // seconds
-    const float LASER_COOLDOWN_MIN = 1.5f;
-    const float LASER_COOLDOWN_MAX = 3.0f;
+    // --- Ground ---
+    const float GROUND_Y = HEIGHT - 80.0f;
+
+    // --- Player ---
+    Player player;
+    InitPlayer(player, GROUND_Y);
+
+    // --- Obstacles ---
+    const int MAX_OBSTACLES = 3;
+    Obstacle obstacles[MAX_OBSTACLES];
+
+    float baseSpeed    = 300.0f;
+    float currentSpeed = baseSpeed;
+
+    // initial obstacle positions
+    for (int i = 0; i < MAX_OBSTACLES; i++)
+    {
+        obstacles[i].w = 40.0f;
+        obstacles[i].h = 60.0f;
+        obstacles[i].x = (float)WIDTH + i * 300.0f;
+        obstacles[i].y = GROUND_Y - obstacles[i].h;
+        obstacles[i].active = true;
+    }
 
     // --- Game state ---
-    bool  gameOver   = false;
-    int   score      = 0;
-    float secCounter = 0.0f;
+    GameState state      = PLAYING;
+    int       score      = 0;
+    float     scoreTimer = 0.0f;
+    const int TARGET_SCORE = 1000;
 
+    // --- Background scroll ---
+    float bgScroll = 0.0f;
+
+    // ---------------- Game loop ----------------
     while (!WindowShouldClose())
     {
         float dt = GetFrameTime();
 
-        // RESTART
-        if (gameOver && IsKeyPressed(KEY_R))
+        // keep theme looping while PLAYING (if it ended)
+        if (state == PLAYING && !IsSoundPlaying(sTheme))
         {
-            circleX = 150.0f;
-            circleY = HEIGHT / 2.0f;
-            axeX    = WIDTH / 2.0f;
-            axeY    = 100.0f;
-            axeVX   = 250.0f;
-            axeVY   = 180.0f;
-
-            laserActive   = false;
-            laserCooldown = 2.0f;
-            laserTimer    = 0.0f;
-
-            score      = 0;
-            secCounter = 0.0f;
-            gameOver   = false;
+            PlaySound(sTheme);
         }
 
-        if (!gameOver)
+        // -------- restart on R when not playing --------
+        if (state != PLAYING && IsKeyPressed(KEY_R))
         {
-            // -------- PLAYER MOVEMENT (WASD) --------
-            if (IsKeyDown(KEY_D)) circleX += PLAYER_SPEED * dt;
-            if (IsKeyDown(KEY_A)) circleX -= PLAYER_SPEED * dt;
-            if (IsKeyDown(KEY_S)) circleY += PLAYER_SPEED * dt;
-            if (IsKeyDown(KEY_W)) circleY -= PLAYER_SPEED * dt;
+            // reset player
+            InitPlayer(player, GROUND_Y);
 
-            // keep inside screen
-            if (circleX < R) circleX = R;
-            if (circleX > WIDTH - R) circleX = WIDTH - R;
-            if (circleY < R) circleY = R;
-            if (circleY > HEIGHT - R) circleY = HEIGHT - R;
+            // reset speed & score
+            currentSpeed = baseSpeed;
+            score        = 0;
+            scoreTimer   = 0.0f;
 
-            // -------- AXE MOVEMENT (2D bounce) --------
-            axeX += axeVX * dt;
-            axeY += axeVY * dt;
-
-            // bounce on walls
-            if (axeX < 0)
+            // reset obstacles
+            for (int i = 0; i < MAX_OBSTACLES; i++)
             {
-                axeX = 0;
-                axeVX *= -1;
-            }
-            if (axeX > WIDTH - AXE_SIZE)
-            {
-                axeX = WIDTH - AXE_SIZE;
-                axeVX *= -1;
-            }
-            if (axeY < 0)
-            {
-                axeY = 0;
-                axeVY *= -1;
-            }
-            if (axeY > HEIGHT - AXE_SIZE)
-            {
-                axeY = HEIGHT - AXE_SIZE;
-                axeVY *= -1;
+                obstacles[i].w = 40.0f;
+                obstacles[i].h = 60.0f;
+                obstacles[i].x = (float)WIDTH + i * 300.0f;
+                obstacles[i].y = GROUND_Y - obstacles[i].h;
+                obstacles[i].active = true;
             }
 
-            // -------- LASER LOGIC --------
-            if (!laserActive)
+            // reset background scroll
+            bgScroll = 0.0f;
+
+            // stop game-over sound if still playing
+            StopSound(sHit);
+
+            // restart theme from the beginning
+            StopSound(sTheme);
+            PlaySound(sTheme);
+
+            state = PLAYING;
+        }
+
+        // ---------------- UPDATE (PLAYING) ----------------
+        if (state == PLAYING)
+        {
+            UpdatePlayer(player, dt, GROUND_Y);
+
+            // scroll background
+            bgScroll -= currentSpeed * 0.4f * dt;
+            if (bgScroll <= -80.0f) bgScroll += 80.0f;
+
+            // move obstacles
+            for (int i = 0; i < MAX_OBSTACLES; i++)
             {
-                laserCooldown -= dt;
-                if (laserCooldown <= 0.0f)
+                if (!obstacles[i].active) continue;
+
+                obstacles[i].x -= currentSpeed * dt;
+
+                // if off-screen → respawn to the right
+                if (obstacles[i].x + obstacles[i].w < 0.0f)
                 {
-                    laserActive = true;
-                    laserTimer  = LASER_DURATION;
-                    // pick a random Y for the laser line
-                    laserY = (float)GetRandomValue(50, HEIGHT - 50);
-                }
-            }
-            else
-            {
-                laserTimer -= dt;
-                if (laserTimer <= 0.0f)
-                {
-                    laserActive = false;
-                    // next laser in a random time
-                    laserCooldown = LASER_COOLDOWN_MIN +
-                        ((float)GetRandomValue(0, 100) / 100.0f) * (LASER_COOLDOWN_MAX - LASER_COOLDOWN_MIN);
+                    obstacles[i].x = (float)WIDTH + (float)GetRandomValue(200, 500);
+                    obstacles[i].y = GROUND_Y - obstacles[i].h;
                 }
             }
 
-            // -------- SCORING & DIFFICULTY --------
-            secCounter += dt;
-            if (secCounter >= 1.0f)
+            // scoring (no sound here)
+            scoreTimer += dt;
+            if (scoreTimer >= 0.1f && score < TARGET_SCORE)
             {
-                secCounter = 0.0f;
+                scoreTimer -= 0.1f;
                 score += 1;
-                PlaySound(sPoint);
 
-                // every 5 points, speed up axe a bit
-                if (score % 5 == 0)
+                // make game a bit faster every 100 points
+                if (score % 100 == 0)
+                    currentSpeed *= 1.10f;
+            }
+
+            if (score >= TARGET_SCORE)
+            {
+                score = TARGET_SCORE;
+                state = WIN;
+
+                // you can stop the theme on win if you want:
+                StopSound(sTheme);
+            }
+
+            // -------- collision check --------
+            Rectangle playerRect = { player.x, player.y, player.width, player.height };
+
+            for (int i = 0; i < MAX_OBSTACLES; i++)
+            {
+                if (!obstacles[i].active) continue;
+
+                Rectangle obsRect = {
+                    obstacles[i].x,
+                    obstacles[i].y,
+                    obstacles[i].w,
+                    obstacles[i].h
+                };
+
+                if (CheckCollisionRecs(playerRect, obsRect))
                 {
-                    float factor = 1.15f;
-                    axeVX *= factor;
-                    axeVY *= factor;
+                    state = GAME_OVER;
+
+                    // stop theme and play hit once
+                    StopSound(sTheme);
+                    PlaySound(sHit);
+                    break;
                 }
             }
-
-            // -------- COLLISION WITH AXE --------
-            float lCircleX = circleX - R;
-            float rCircleX = circleX + R;
-            float uCircleY = circleY - R;
-            float bCircleY = circleY + R;
-
-            float lAxeX = axeX;
-            float rAxeX = axeX + AXE_SIZE;
-            float uAxeY = axeY;
-            float bAxeY = axeY + AXE_SIZE;
-
-            bool collideAxe = (bAxeY >= uCircleY) &&
-                              (bCircleY >= uAxeY) &&
-                              (rAxeX >= lCircleX) &&
-                              (rCircleX >= lAxeX);
-
-            // -------- COLLISION WITH LASER --------
-            bool collideLaser = false;
-            if (laserActive)
-            {
-                // laser is a horizontal rectangle across the whole width
-                float laserTop    = laserY - LASER_THICKNESS * 0.5f;
-                float laserBottom = laserY + LASER_THICKNESS * 0.5f;
-
-                // if any part of the circle vertical span overlaps the laser span
-                if (bCircleY >= laserTop && uCircleY <= laserBottom)
-                    collideLaser = true;
-            }
-
-            if (collideAxe || collideLaser)
-            {
-                gameOver = true;
-                PlaySound(sHit);
-            }
         }
 
-        // ------------- DRAW -------------
+        // ---------------- DRAW ----------------
         BeginDrawing();
-        ClearBackground(BLACK);
+        ClearBackground(DARKBLUE);
 
-        if (gameOver)
+        // ---- SCARY BACKGROUND ----
+
+        // blood-red moon
+        DrawCircle(WIDTH - 90, 80, 45, (Color){ 200, 20, 20, 255 });
+        DrawCircle(WIDTH - 80, 75, 30, DARKBLUE); // small bite
+
+        // far mountains (dark silhouettes)
+        DrawTriangle(
+            (Vector2){  50 + bgScroll * 0.2f, GROUND_Y },
+            (Vector2){ 200 + bgScroll * 0.2f, 220 },
+            (Vector2){ 350 + bgScroll * 0.2f, GROUND_Y },
+            (Color){ 10, 10, 40, 255 }
+        );
+        DrawTriangle(
+            (Vector2){ 300 + bgScroll * 0.2f, GROUND_Y },
+            (Vector2){ 480 + bgScroll * 0.2f, 200 },
+            (Vector2){ 660 + bgScroll * 0.2f, GROUND_Y },
+            (Color){ 5, 5, 25, 255 }
+        );
+
+        // little dark rocks instead of crosses
+        for (int i = 0; i < 6; i++)
         {
-            DrawText("GAME OVER!", 260, 160, 50, RED);
-            DrawText(TextFormat("Score: %d", score), 330, 220, 30, RAYWHITE);
-            DrawText("Press R to restart", 290, 270, 20, GRAY);
+            float rx = (float)(i * 140) + bgScroll * 0.5f;
+            float ry = GROUND_Y - 8.0f;
+            DrawEllipse(rx, ry, 10, 5, (Color){ 20, 20, 20, 255 });
         }
-        else
+
+        // creepy dead trees
+        for (int i = 0; i < 3; i++)
         {
-            // draw background "running" stripes to make it feel dynamic
-            for (int x = 0; x < WIDTH; x += 40)
-                DrawRectangleLines(x, 0, 40, HEIGHT, Fade(DARKGRAY, 0.2f));
+            float tx = (float)(120 + i * 240) + bgScroll * 0.3f;
+            float ty = GROUND_Y - 60.0f;
+            DrawRectangle(tx, ty, 8, 60, BLACK);
+            DrawLine(tx,     ty,     tx - 20, ty - 25, BLACK);
+            DrawLine(tx + 8, ty - 5, tx + 28, ty - 30, BLACK);
+        }
 
-            // player
-            DrawCircle((int)circleX, (int)circleY, R, SKYBLUE);
+        // ground
+        DrawRectangle(
+            0, (int)GROUND_Y,
+            WIDTH, HEIGHT - (int)GROUND_Y,
+            (Color){ 10, 60, 10, 255 }
+        );
 
-            // axe
-            DrawRectangle((int)axeX, (int)axeY, (int)AXE_SIZE, (int)AXE_SIZE, RED);
+        // vertical “blood mist” stripes
+        for (int x = -80; x < WIDTH + 80; x += 80)
+        {
+            DrawLine(
+                x + (int)bgScroll, 0,
+                x + (int)bgScroll, (int)GROUND_Y,
+                Fade((Color){ 120, 0, 0, 255 }, 0.15f)
+            );
+        }
 
-            // laser
-            if (laserActive)
-            {
-                DrawRectangle(0, (int)(laserY - LASER_THICKNESS / 2),
-                              WIDTH, (int)LASER_THICKNESS,
-                              Color{ 255, 0, 255, 160 }); // purple, semi-transparent
-            }
+        // Obstacles
+        for (int i = 0; i < MAX_OBSTACLES; i++)
+        {
+            if (!obstacles[i].active) continue;
+            DrawRectangle(
+                (int)obstacles[i].x,
+                (int)obstacles[i].y,
+                (int)obstacles[i].w,
+                (int)obstacles[i].h,
+                RED
+            );
+        }
 
-            // HUD
-            DrawText(TextFormat("Score: %d", score), 20, 20, 25, RAYWHITE);
-            DrawText("Move: WASD | Avoid axe + laser | R = restart", 20, HEIGHT - 30, 18, GRAY);
+        // Player
+        DrawPlayer(player);
+
+        // HUD
+        DrawText(
+            TextFormat("Score: %d / %d", score, TARGET_SCORE),
+            20, 20, 24, RAYWHITE
+        );
+        DrawText(
+            "Move: A/D or Arrows | Jump: SPACE/W/UP | R = restart",
+            20, 50, 18, RAYWHITE
+        );
+
+        // overlays
+        if (state == GAME_OVER)
+        {
+            DrawText("GAME OVER!", 260, 150, 50, RED);
+            DrawText(
+                TextFormat("Final Score: %d", score),
+                320, 210, 30, RAYWHITE
+            );
+            DrawText("Press R to try again", 290, 260, 22, RAYWHITE);
+        }
+        else if (state == WIN)
+        {
+            DrawText("YOU WIN!", 280, 150, 56, GOLD);
+            DrawText("You reached 1000 points!", 250, 210, 28, RAYWHITE);
+            DrawText("Press R to play again", 290, 260, 22, RAYWHITE);
         }
 
         EndDrawing();
     }
 
-    UnloadSound(sPoint);
+    // ---------------- Cleanup ----------------
+    StopSound(sTheme);
+    StopSound(sHit);
+    UnloadSound(sTheme);
     UnloadSound(sHit);
+
+    UnloadPlayer(player);
+
     CloseAudioDevice();
     CloseWindow();
     return 0;
