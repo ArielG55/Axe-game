@@ -1,21 +1,14 @@
 # Axe Dodge (C++ + raylib)
 
-A tiny arcade game: move the blue circle with **A/D** and dodge the red axe that bounces vertically.  
-You gain **+1 score per second** survived. The axe **speeds up every 5 points**.  
-Press **R** after collision to **restart**. Includes simple **sound effects**.
+A 2D horror runner game developed in C++ with Raylib.
+Includes custom player physics, dynamic background effects, obstacle system, collision detection, and looping background music. Designed as a learning project focusing on game mechanics, animation, and real-time input handling.
 
 ## Demo
-_Add a screenshot or GIF here (e.g., `docs/screenshot.png`)._
-<img width="365" height="218" alt="Capture d’écran 2025-11-09 à 19 11 30" src="https://github.com/user-attachments/assets/1db75ea0-e73e-4580-adb2-fa4aa059e854" />
+_Add a screenshot or GIF here (e.g., <img width="347" height="216" alt="Capture d’écran 2025-12-07 à 21 11 32" src="https://github.com/user-attachments/assets/34aec058-81f1-4662-bdf9-cd26bd360610" />
+`docs/screenshot.png`)._
 
 ## Features
-- Real-time game loop with raylib
-- Keyboard input (A/D, R)
-- AABB collision detection
-- Frame-rate independent timing (`GetFrameTime`)
-- Difficulty ramp (axe speed increases with score)
-- Sound effects (`point.wav` on score, `GameOver.wav` on hit)
-- VS Code tasks/launch + Makefile
+Controls are simple: move left and right with A/D or the arrow keys, jump with Space, W, or Up, and restart the game with R. The project uses a clean C++ codebase split into multiple files (main game loop and player handling), along with a Makefile for building. All required assets—Player.png, Theme.wav, and GameOver.wav—should be placed in the same folder as the executable.
 
 ## Build & Run (Windows, w64devkit + raylib)
 1. Install the official raylib Windows kit so you have `C:\raylib\w64devkit` and headers/libs.
